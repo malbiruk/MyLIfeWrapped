@@ -12,5 +12,7 @@ via DALL-E-2 with prompt `colorful abstract art with gradients in pastel colors`
 1. Repeat this process every day automatically.
 
 In the end I get something like this:
-
+<p align="center">
 <img src="mlw_demo.gif" width="300">
+</p>
+
