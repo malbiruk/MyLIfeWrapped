@@ -1,0 +1,7 @@
+calendar_/*.csv
+calendar_/*.json
+*.json
+*.csv
+*.png
+backgrounds*
+logo/*
