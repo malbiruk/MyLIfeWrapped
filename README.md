@@ -12,4 +12,4 @@ via DALL-E-2 with prompt `colorful abstract art with gradients in pastel colors`
 1. Repeat this process every day automatically.
 
 In the end I get something like this:
-![MYLifeWrapped demo](mlw_demo.gif){:height="150px"}
+![MYLifeWrapped demo](mlw_demo.gif)
