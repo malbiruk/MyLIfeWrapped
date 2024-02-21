@@ -5,3 +5,4 @@ calendar_/*.json
 *.png
 backgrounds*
 logo/*
+__pycache__*
