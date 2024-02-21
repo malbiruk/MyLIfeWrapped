@@ -13,4 +13,4 @@ via DALL-E-2 with prompt `colorful abstract art with gradients in pastel colors`
 
 In the end I get something like this:
 
-<img src="mlw_demo.gif" width="48">
+<img src="mlw_demo.gif" width="300">
