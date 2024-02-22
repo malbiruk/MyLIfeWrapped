@@ -98,8 +98,17 @@ def create_slide(
         }
     ]
 
-    # If you wish to populate the slide with elements,
-    # add element create requests here, using the page_id.
+    # delete only if slide exists:
+    slides = (
+        service.presentations()
+        .get(presentationId=presentation_id)
+        .execute()
+        .get("slides", [])
+    )
+    slide_exists = any(slide.get("objectId") == page_id for slide in slides)
+    if not slide_exists:
+        requests = requests[1:]
+        print(f'{page_id} did not exist - adding new slide')
 
     # Execute the request.
     body = {"requests": requests}

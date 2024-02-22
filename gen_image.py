@@ -7,6 +7,7 @@ import os
 import random
 import xml.etree.ElementTree as ET
 
+import joypy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -559,24 +560,6 @@ def groovy_day_circle(
         prev_entry['start_time_seconds'] = row.start_time_seconds
         prev_entry['duration_seconds'] = row.duration_seconds
 
-    # for i, cat in enumerate(median_day.category.unique()):
-    #     angle = (360 / len(median_day.category.unique()) * i
-    #              - 360 / 6 / len(median_day.category.unique()))
-    #     x = 0.5 + (r - .03) * np.cos(np.radians(angle))
-    #     y = 0.5 + (r - .07) * np.sin(np.radians(angle))
-    #
-    #     ha = 'left' if 90 < angle < 270 else 'right'
-    #     if (60 < angle < 120) or (240 < angle < 300):
-    #         ha = 'center'
-    #
-    #     ax.text(x, y,
-    #             cat,
-    #             c=cat_to_color[cat],
-    #             ha=ha, va='center',
-    #             fontfamily='Ubuntu',
-    #             fontweight='bold',
-    #             fontsize=16)
-
     ax.margins(x=0)
     plt.axis('equal')
     plt.tight_layout(pad=0)
@@ -633,5 +616,79 @@ def groovy_day_circle(
         'transparent_chart_2.png',
         y1_mod=1.2,
         title=title,
+    )
+    crop_img(img, output_path)
+
+
+def groovy_ridgeplot(
+        ridge_df: DataFrame,
+        title: str,
+        output_path: str) -> None:
+    '''
+    create ridgeplot by category with durations as densities and date as x
+    ridge_df should have date, category, category_color, and duration (in mins)
+    '''
+    category_order = list(ridge_df['category'].unique())
+    colors = list(ridge_df['category_color'].unique())
+    df_expanded = ridge_df.loc[ridge_df.index.repeat(
+        ridge_df['duration'].astype(int))]
+    df_expanded = df_expanded.drop('duration', axis=1)
+    df_expanded['date_ordinal'] = pd.to_datetime(
+        df_expanded['date']).apply(lambda x: x.toordinal())
+    df_expanded['category'] = pd.Categorical(
+        df_expanded['category'],
+        categories=category_order, ordered=True)
+
+    # plt.figure(figsize=(576 / 100, 576 * 10 / 8 / 100), dpi=100)
+    fig, axes = joypy.joyplot(
+        data=df_expanded,
+        by='category',
+        column='date_ordinal',
+        overlap=2,
+        lw=0,
+        color=colors,
+        figsize=(576 / 100, 576 * (10 / 8) / 100),
+    )
+
+    min_date = df_expanded['date_ordinal'].min()
+    max_date = df_expanded['date_ordinal'].max()
+    # mid_date = (max_date - min_date) / 2 + min_date
+
+    min_date, max_date = [pd.Timestamp.fromordinal(int(i)).strftime('%B %-d')
+                          for i in [min_date, max_date]]
+
+    # plt.xticks(ticks=df_expanded['date_ordinal'].unique(),
+    #            labels=df_expanded['date'].unique())
+    for ax, category in zip(axes, category_order):
+        ax.set_yticklabels([])  # Hide yticklabels
+        ax.text(.5, .25, category, transform=ax.transAxes,
+                va='center', ha='center',
+                fontname='Ubuntu', fontsize=18,
+                zorder=10)
+    plt.tick_params(width=0)
+    plt.xticks([])
+    plt.text(0.025, .5, min_date, transform=fig.transFigure,
+            va='center', ha='center',
+            fontname='Ubuntu', fontsize=14, rotation=90,
+            zorder=2.5)
+    plt.text(.975, .5, max_date, transform=fig.transFigure,
+            va='center', ha='center',
+            fontname='Ubuntu', fontsize=14, rotation=-90,
+            zorder=2.5)
+
+    plt.margins(0, 0)
+    # plt.tight_layout(pad=0)
+
+    plt.subplots_adjust(left=.05, right=.95)
+
+    plt.savefig('transparent_chart.png', bbox_inches='tight',
+                transparent=True, pad_inches=0)
+    plt.close()
+
+    img = add_bg_and_h1(
+        'transparent_chart.png',
+        y1_mod=1.15,
+        title=title,
+        y_title_mod=.125
     )
     crop_img(img, output_path)

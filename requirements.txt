@@ -23,6 +23,7 @@ httplib2==0.22.0
 httpx==0.26.0
 idna==3.6
 joblib==1.3.2
+joypy==0.2.6
 kiwisolver==1.4.5
 markdown-it-py==3.0.0
 matplotlib==3.8.3

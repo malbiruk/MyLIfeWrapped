@@ -1,7 +1,7 @@
 '''
 calculate and generate images of different stats from calendar_/all_events.csv
 '''
-import sys
+
 
 import gen_image
 import matplotlib
@@ -11,8 +11,6 @@ import pandas as pd
 from colorutils import hex_to_rgb, rgb_to_hex
 from pandas import DataFrame
 from sklearn.cluster import DBSCAN
-
-# sys.path.append('/home/username/.virtualenvs/MyLifeWrapped/')
 
 
 def flatten(lst: list) -> list:
@@ -431,6 +429,21 @@ def get_median_day(df: DataFrame, timerange: str,
     )
 
 
+def get_categories_dynamics(df: DataFrame, timerange: str,
+                            postfix: str = '') -> None:
+    '''
+    Calculate and save image of duration dynamics per date per category
+    '''
+    df = df.copy()
+    df['date'] = df.start_local.dt.date
+    ridge_df = df.groupby(['date', 'category', 'category_color'],
+                          as_index=False).duration.sum()
+    ridge_df.duration = ridge_df.duration / pd.Timedelta(minutes=1)
+    title = f'Dynamics of time\nspent per category\nthis {timerange}'
+    output_path = f'pictures/10_categories_dynamics_{timerange}{postfix}.png'
+    gen_image.groovy_ridgeplot(ridge_df, title, output_path)
+
+
 def main() -> None:
     '''
     calculate and generate images of different stats
@@ -463,12 +476,17 @@ def main() -> None:
             get_longest_event_per_day(df_part, timerange, postfix)
             get_average_categories_per_day(df_part, timerange, postfix)
             get_median_day(df_part, timerange, postfix)
+            get_categories_dynamics(df_part, timerange, postfix)
     # print('done.')
-
 
 # %%
 if __name__ == '__main__':
     main()
+
+
+# %%
+# import sys
+# sys.path.append('/home/klim/.virtualenvs/MyLifeWrapped/lib/python3.10/site-packages/')
 
 
 # %%
