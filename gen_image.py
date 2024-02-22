@@ -5,14 +5,13 @@ for MyLifeWrapped app
 
 import os
 import random
-import xml.etree.ElementTree as ET
 
 import joypy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from matplotlib import patheffects, rcParams
-from matplotlib.patches import FancyBboxPatch, Wedge
+from matplotlib.patches import Wedge
 from pandas import DataFrame
 from PIL import Image, ImageDraw, ImageFont
 from wordcloud import WordCloud
