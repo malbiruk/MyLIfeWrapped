@@ -4,6 +4,7 @@ calculate and generate images of different stats from calendar_/all_events.csv
 
 
 import gen_image
+import july
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
@@ -466,6 +467,16 @@ def get_weekday_dynamics(df: DataFrame, timerange: str,
     gen_image.groovy_3d_barplot(df, title, output_path)
 
 
+def get_mood_heatmap(df: DataFrame, timerange: str,
+                     postfix: str = '') -> None:
+    '''
+    calculate and save image of mood heatmap
+    '''
+    title = f'Your mood during\nthis {timerange}'
+    output_path = f'pictures/12_mood_heatmap_{timerange}{postfix}.png'
+    gen_image.groovy_july(df, title, output_path)
+
+
 def main() -> None:
     '''
     calculate and generate images of different stats
@@ -474,6 +485,8 @@ def main() -> None:
     df_nsfw = pd.read_csv('calendar_/all_events.csv')
     df_sfw = df_nsfw.loc[
         ~df_nsfw.event_name.isin(['sex', 'masturbation', 'pooping'])].copy()
+    df_mood = pd.read_csv('calendar_/daily_notes.csv')
+    df_mood['date'] = df_mood['date'].apply(pd.to_datetime)
 
     print('calculating stats...')
     for df, postfix in zip((df_nsfw, df_sfw), ('_nsfw', '_sfw')):
@@ -500,6 +513,15 @@ def main() -> None:
             get_median_day(df_part, timerange, postfix)
             get_categories_dynamics(df_part, timerange, postfix)
             get_weekday_dynamics(df_part, timerange, postfix)
+
+            df_mood_part = df_mood.loc[
+                df_mood['date'].dt.date >= (
+                    pd.to_datetime('today', utc=True)
+                    - pd.to_timedelta(
+                        f'{tr_to_days[timerange]}days')).date()
+            ]
+            get_mood_heatmap(df_mood_part, timerange, postfix)
+
     # print('done.')
 
 
@@ -532,15 +554,5 @@ if __name__ == '__main__':
 # ]
 
 # %%
-# df = df.copy()
-# df.loc[df.event_name == 'sleep', 'category'] = 'sleep'
-# df.loc[df.category == 'sleep', 'category_color'] = (
-#     df.loc[df.category == 'sleep', 'category_color']
-#     .apply(lambda x: rgb_to_hex(
-#         tuple(i - 40 for i in hex_to_rgb(x)))))
-#
-# df['date'] = df['start_local'].dt.date
-# df = (df
-#       .groupby(['date', 'category', 'category_color'], as_index=False)
-#       .agg({'duration': 'sum'}))
-# df.duration = df.duration / pd.Timedelta(minutes=1)
+
+# %%

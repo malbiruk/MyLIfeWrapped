@@ -237,7 +237,7 @@ def main(force: bool) -> None:
     df.to_csv('all_events.csv', index=False)
 
     other_cal = [i for i in my_calendars if i.name == 'other'][0]
-    dn = get_daily_notes(other_cal, service, start_time)
+    dn = get_daily_notes(other_cal, service, '2024-02-01T00:00:00Z')
     dn.to_csv('daily_notes.csv', index=False)
 
     # print('done.')

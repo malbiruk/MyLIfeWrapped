@@ -7,6 +7,7 @@ import os
 import random
 
 import joypy
+import july
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -181,7 +182,7 @@ def groovy_barplot(labels: list,
     colors = np.array(colors)[sorted_indices]
 
     # Create a horizontal bar plot
-    fig, ax = plt.subplots(figsize=(576 / 100, 576 / 100), dpi=100)
+    fig, ax = plt.subplots(figsize=(576 / 100, 576*1.2 / 100), dpi=100)
 
     # Customize the appearance
     bars = ax.barh(labels, values, color=colors, height=0.6, edgecolor='none')
@@ -225,6 +226,7 @@ def groovy_barplot(labels: list,
 
     ax.margins(x=0)
     ax.set_xlim(0)
+    ax.set_ylim(-.5, len(labels)+.5)
 
     ax.set_xticks([])
     ax.set_yticks([])
@@ -243,7 +245,7 @@ def groovy_barplot(labels: list,
                 transparent=True)
     plt.close()
 
-    img = add_bg_and_h1('transparent_chart.png', title, y1_mod=1.2)
+    img = add_bg_and_h1('transparent_chart.png', title, y1_mod=1.1)
     crop_img(img, output_path)
 
 
@@ -531,14 +533,14 @@ def groovy_day_circle(
     #     return start1 < end2 and start2 < end1
 
     c = -1
-    # prev_entry = {'category': None,
-    #               'start_time_seconds': None,
-    #               'duration_seconds': None}
+    prev_entry = {'category': None,
+                  'start_time_seconds': None,
+                  'duration_seconds': None}
     for _, row in median_day.iterrows():
-        # if ((row.category != prev_entry['category'])
+        if (row.category != prev_entry['category']):
         #         or (row.category == prev_entry['category']
         #             and events_overlap(row, prev_entry))):
-        c += 1
+            c += 1
         r = radius - c * gap
         # print(row.category, r)
         theta2 = 90 - row.start_time_seconds / 3600 * 15
@@ -555,9 +557,9 @@ def groovy_day_circle(
                                 lw=1, alpha=.2, fill=False))
         ax.add_patch(wedge)
 
-        # prev_entry['category'] = row.category
-        # prev_entry['start_time_seconds'] = row.start_time_seconds
-        # prev_entry['duration_seconds'] = row.duration_seconds
+        prev_entry['category'] = row.category
+        prev_entry['start_time_seconds'] = row.start_time_seconds
+        prev_entry['duration_seconds'] = row.duration_seconds
 
     ax.margins(x=0)
     plt.axis('equal')
@@ -798,5 +800,57 @@ def groovy_3d_barplot(
         # x_mod=.05,
         title=title,
         y_title_mod=.1
+    )
+    crop_img(img, output_path)
+
+
+def groovy_july(
+        df: DataFrame,
+        title: str,
+        output_path: str) -> None:
+    fig, ax = plt.subplots(figsize=(576 / 100, 576 / 100,), dpi=100)
+    fig.patch.set_alpha(0)
+    # plt.axis('off')
+
+    hm = july.heatmap(df.date, df.mood, cmap='RdYlGn',
+                 date_label=True, horizontal=False,
+                 year_label=False,
+                 cmin=1, cmax=5,
+                 ax=ax,
+                 )
+
+    ax.collections[0].set_linewidth(0)
+
+
+    for text in ax.texts:
+        text.set_fontfamily('Ubuntu')
+        text.set_size(14)
+        text.set_color('#1e1e1e')
+
+    # Set the font for x-axis and y-axis labels
+    ax.set_xticklabels(
+        ax.get_xticklabels(),
+        fontdict={'family': 'Ubuntu', 'color': '#1e1e1e',
+                  'size': 15})
+    ax.set_yticklabels(
+        ax.get_yticklabels(),
+        fontdict={'family': 'Ubuntu', 'color': '#1e1e1e', 'weight': 'bold',
+                  'size': 20})
+    ax.tick_params(axis='both', which='both', length=0, pad=10)
+
+    plt.margins(0, 0)
+    plt.tight_layout(pad=0)
+
+    plt.subplots_adjust(left=.05, right=.95)
+
+    plt.savefig('transparent_chart.png', bbox_inches='tight',
+                transparent=True, pad_inches=0)
+    plt.close()
+
+    img = add_bg_and_h1(
+        'transparent_chart.png',
+        y1_mod=1.2,
+        title=title,
+        y_title_mod=1 / 6
     )
     crop_img(img, output_path)
