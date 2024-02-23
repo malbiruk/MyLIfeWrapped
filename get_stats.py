@@ -432,7 +432,7 @@ def get_median_day(df: DataFrame, timerange: str,
 def get_categories_dynamics(df: DataFrame, timerange: str,
                             postfix: str = '') -> None:
     '''
-    Calculate and save image of duration dynamics per date per category
+    calculate and save image of duration dynamics per date per category
     '''
     df = df.copy()
     df['date'] = df.start_local.dt.date
@@ -442,6 +442,28 @@ def get_categories_dynamics(df: DataFrame, timerange: str,
     title = f'Dynamics of time\nspent per category\nthis {timerange}'
     output_path = f'pictures/10_categories_dynamics_{timerange}{postfix}.png'
     gen_image.groovy_ridgeplot(ridge_df, title, output_path)
+
+
+def get_weekday_dynamics(df: DataFrame, timerange: str,
+                         postfix: str = '') -> None:
+    '''
+    calculate and save image of weekday duration dynamics per category
+    '''
+    df = df.copy()
+    df.loc[df.event_name == 'sleep', 'category'] = 'sleep'
+    df.loc[df.category == 'sleep', 'category_color'] = (
+        df.loc[df.category == 'sleep', 'category_color']
+        .apply(lambda x: rgb_to_hex(
+            tuple(i - 40 for i in hex_to_rgb(x)))))
+
+    df['date'] = df['start_local'].dt.date
+    df = (df
+          .groupby(['date', 'category', 'category_color'], as_index=False)
+          .agg({'duration': 'sum'}))
+    df.duration = df.duration / pd.Timedelta(minutes=1)
+    title = f'Explore weekday dynamics\nof your {timerange}'
+    output_path = f'pictures/11_weekday_dynamics_{timerange}{postfix}.png'
+    gen_image.groovy_3d_barplot(df, title, output_path)
 
 
 def main() -> None:
@@ -477,7 +499,9 @@ def main() -> None:
             get_average_categories_per_day(df_part, timerange, postfix)
             get_median_day(df_part, timerange, postfix)
             get_categories_dynamics(df_part, timerange, postfix)
+            get_weekday_dynamics(df_part, timerange, postfix)
     # print('done.')
+
 
 # %%
 if __name__ == '__main__':
@@ -508,3 +532,15 @@ if __name__ == '__main__':
 # ]
 
 # %%
+# df = df.copy()
+# df.loc[df.event_name == 'sleep', 'category'] = 'sleep'
+# df.loc[df.category == 'sleep', 'category_color'] = (
+#     df.loc[df.category == 'sleep', 'category_color']
+#     .apply(lambda x: rgb_to_hex(
+#         tuple(i - 40 for i in hex_to_rgb(x)))))
+#
+# df['date'] = df['start_local'].dt.date
+# df = (df
+#       .groupby(['date', 'category', 'category_color'], as_index=False)
+#       .agg({'duration': 'sum'}))
+# df.duration = df.duration / pd.Timedelta(minutes=1)

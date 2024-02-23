@@ -10,7 +10,7 @@ import joypy
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from matplotlib import patheffects, rcParams
+from matplotlib import patheffects, rcParams, transforms
 from matplotlib.patches import Wedge
 from pandas import DataFrame
 from PIL import Image, ImageDraw, ImageFont
@@ -518,27 +518,27 @@ def groovy_day_circle(
             fontsize = 16
             fontweight = 'bold'
         ax.text(hour_x, hour_y, f'{hour :02d}',
-                color='black', ha='center', va='center', fontsize=fontsize,
+                color='#1E1E1E', ha='center', va='center', fontsize=fontsize,
                 fontfamily='Ubuntu', fontweight=fontweight,
                 rotation=-hour * 15)
 
-    def events_overlap(event1, event2):
-        start1 = event1['start_time_seconds']
-        end1 = start1 + event1['duration_seconds']
-        start2 = event2['start_time_seconds']
-        end2 = start2 + event2['duration_seconds']
-
-        return start1 < end2 and start2 < end1
+    # def events_overlap(event1, event2):
+    #     start1 = event1['start_time_seconds']
+    #     end1 = start1 + event1['duration_seconds']
+    #     start2 = event2['start_time_seconds']
+    #     end2 = start2 + event2['duration_seconds']
+    #
+    #     return start1 < end2 and start2 < end1
 
     c = -1
-    prev_entry = {'category': None,
-                  'start_time_seconds': None,
-                  'duration_seconds': None}
+    # prev_entry = {'category': None,
+    #               'start_time_seconds': None,
+    #               'duration_seconds': None}
     for _, row in median_day.iterrows():
-        if ((row.category != prev_entry['category'])
-                or (row.category == prev_entry['category']
-                    and events_overlap(row, prev_entry))):
-            c += 1
+        # if ((row.category != prev_entry['category'])
+        #         or (row.category == prev_entry['category']
+        #             and events_overlap(row, prev_entry))):
+        c += 1
         r = radius - c * gap
         # print(row.category, r)
         theta2 = 90 - row.start_time_seconds / 3600 * 15
@@ -555,9 +555,9 @@ def groovy_day_circle(
                                 lw=1, alpha=.2, fill=False))
         ax.add_patch(wedge)
 
-        prev_entry['category'] = row.category
-        prev_entry['start_time_seconds'] = row.start_time_seconds
-        prev_entry['duration_seconds'] = row.duration_seconds
+        # prev_entry['category'] = row.category
+        # prev_entry['start_time_seconds'] = row.start_time_seconds
+        # prev_entry['duration_seconds'] = row.duration_seconds
 
     ax.margins(x=0)
     plt.axis('equal')
@@ -656,24 +656,36 @@ def groovy_ridgeplot(
     min_date, max_date = [pd.Timestamp.fromordinal(int(i)).strftime('%B %-d')
                           for i in [min_date, max_date]]
 
-    # plt.xticks(ticks=df_expanded['date_ordinal'].unique(),
-    #            labels=df_expanded['date'].unique())
     for ax, category in zip(axes, category_order):
         ax.set_yticklabels([])  # Hide yticklabels
-        ax.text(.5, .25, category, transform=ax.transAxes,
-                va='center', ha='center',
+        trans = transforms.blended_transform_factory(ax.transData, ax.transAxes)
+        line = ax.get_lines()[1]
+        x_values = line.get_xdata()
+        densities = line.get_ydata()
+        if np.sum(densities) == 0:
+            continue
+        cumulative_density = np.cumsum(densities) / np.sum(densities)
+        median_value_index = np.argmin(np.abs(cumulative_density - 0.5))
+        median_x_value = x_values[median_value_index]
+
+        ax.text(median_x_value, .25, category, transform=trans,
+                va='center', ha='center', color='#1E1E1E',
                 fontname='Ubuntu', fontsize=18,
                 zorder=10)
     plt.tick_params(width=0)
     plt.xticks([])
-    plt.text(0.025, .5, min_date, transform=fig.transFigure,
-            va='center', ha='center',
-            fontname='Ubuntu', fontsize=14, rotation=90,
-            zorder=2.5)
-    plt.text(.975, .5, max_date, transform=fig.transFigure,
-            va='center', ha='center',
-            fontname='Ubuntu', fontsize=14, rotation=-90,
-            zorder=2.5)
+    n_spaces_min = 7 if len(max_date) > len(min_date) else 5
+    n_spaces_max = 7 if len(min_date) > len(max_date) else 5
+    plt.text(0.025, .5, ((min_date + ' ' * n_spaces_min) * 4).strip(),
+             transform=fig.transFigure,
+             va='center', ha='center', color='#1E1E1E',
+             fontname='Ubuntu', fontsize=14, rotation=90,
+             zorder=2.5)
+    plt.text(.975, .5, ((max_date + ' ' * n_spaces_max) * 4).strip(),
+             transform=fig.transFigure,
+             va='center', ha='center', color='#1E1E1E',
+             fontname='Ubuntu', fontsize=14, rotation=-90,
+             zorder=2.5)
 
     plt.margins(0, 0)
     # plt.tight_layout(pad=0)
@@ -689,5 +701,102 @@ def groovy_ridgeplot(
         y1_mod=1.15,
         title=title,
         y_title_mod=.125
+    )
+    crop_img(img, output_path)
+
+
+def groovy_3d_barplot(
+        df: DataFrame,
+        title: str,
+        output_path: str) -> None:
+    '''
+    create 3d barplot with categories, weekdays and values
+    '''
+    category_colors = dict(zip(df['category'].unique(),
+                               df['category_color'].unique()))
+
+    df['weekday'] = pd.to_datetime(df['date']).dt.strftime('%a')
+    median_duration_by_category = df.groupby(
+        'category')['duration'].mean().sort_values()
+    sorted_categories = median_duration_by_category.index.tolist()
+
+    fig = plt.figure(
+        figsize=(576 * 1.3 / 100, 576 * 1.3 * 1.5 / 100), dpi=100)
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_box_aspect((1, df['category'].nunique() / 7, 1.5))
+
+    df = df.groupby(['category', 'weekday'], as_index=False).agg(
+        {'duration': 'median'})
+
+    # Convert categorical variables to numeric codes
+    weekday_order = ['Mon', 'Tue', 'Wed',
+                     'Thu', 'Fri', 'Sat', 'Sun']
+    df['weekday'] = pd.Categorical(df['weekday'], categories=weekday_order,
+                                   ordered=True)
+    df['weekday_code'] = df['weekday'].cat.codes
+
+    df['category'] = pd.Categorical(df['category'],
+                                    categories=sorted_categories,
+                                    ordered=True)
+
+    df['category_code'] = df['category'].cat.codes
+
+    x = df['weekday_code']
+    y = df['category_code']
+    z = df['duration']
+
+    # Create 3D bars
+    ax.bar3d(x, y, 0, 1, 1, z, shade=True,
+             color=[category_colors[cat] for cat in df['category']],
+             ec='#1e1e1e', lw=1)
+
+    # Set tick labels
+    ax.set_xticks(df['weekday_code'].unique())
+    ax.set_xticklabels(df['weekday'].unique())
+    ax.set_yticks(df['category_code'].unique())
+    ax.set_yticklabels(df['category'].unique())
+    ax.set_zlim(bottom=-100)
+
+    ax.view_init(elev=10, azim=-60)
+
+    ax.set_axis_off()
+
+    for i, label in zip(df['weekday_code'].unique(), df['weekday'].unique()):
+        ax.text(i + 1, -1, 0, label,
+                color='#1e1e1e', ha='center', va='center',
+                zdir='x', fontname='Ubuntu', fontsize=14)
+
+    for i, (label, color) in enumerate(zip(
+            sorted_categories,
+            [category_colors[cat] for cat in sorted_categories])):
+        ax.text(7.25, i, 0, label, color=color,
+                ha='center', va='top', zdir='z',
+                fontname='Ubuntu', fontweight='bold', fontsize=18)
+
+    for i, row in df[df['weekday'] == 'Sun'].iterrows():
+        if row['duration'] < df['duration'].max() * .1:
+            continue
+        x_coord = 6
+        y_coord = row['category_code'] + 2.5
+        z_coord = row['duration'] / 2 - df.duration.max() * .05
+        annotation_text = f"{round(row['duration'])} min"
+        ax.text(x_coord, y_coord, z_coord, annotation_text,
+                color='#bbb', ha='center', va='center',
+                zdir='z', fontname='Ubuntu', fontsize=8)
+
+    ax.margins(0, 0, 0)
+    plt.tight_layout(pad=0)
+    plt.subplots_adjust(left=0, right=1)
+
+    plt.savefig('transparent_chart.png', bbox_inches='tight',
+                transparent=True, pad_inches=0)
+    plt.close()
+
+    img = add_bg_and_h1(
+        'transparent_chart.png',
+        y1_mod=1.15,
+        # x_mod=.05,
+        title=title,
+        y_title_mod=.1
     )
     crop_img(img, output_path)
