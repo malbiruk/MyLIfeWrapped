@@ -4,7 +4,6 @@ calculate and generate images of different stats from calendar_/all_events.csv
 
 
 import gen_image
-import july
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np

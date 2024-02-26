@@ -812,7 +812,7 @@ def groovy_july(
     fig.patch.set_alpha(0)
     # plt.axis('off')
 
-    hm = july.heatmap(df.date, df.mood, cmap='RdYlGn',
+    july.heatmap(df.date, df.mood, cmap='RdYlGn',
                  date_label=True, horizontal=False,
                  year_label=False,
                  cmin=1, cmax=5,
