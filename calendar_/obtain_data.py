@@ -7,7 +7,9 @@ import datetime
 import os.path
 from dataclasses import dataclass
 
+import googlemaps
 import pandas as pd
+from calendar_.my_api_keys import GM_API_KEY
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -21,8 +23,10 @@ CALENDARS_TO_EXCLUDE = ['Birthdays',
                         'k.kostyuk@insilicomedicine.com',
                         'k.kostyuk@easyomics.com']
 
+DIR_PATH = 'calendar_'
 
-def create_credentials(scopes: list) -> None:
+
+def create_credentials(scopes: list, directory: str = '.') -> None:
     '''
     generate token.json for user and use it if it exists
     '''
@@ -30,19 +34,20 @@ def create_credentials(scopes: list) -> None:
     # The file token.json stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
     # time.
-    if os.path.exists('token.json'):
-        creds = Credentials.from_authorized_user_file('token.json', scopes)
+    if os.path.exists(f'{directory}/token.json'):
+        creds = Credentials.from_authorized_user_file(
+            f'{directory}/token.json', scopes)
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                'credentials.json', scopes
+                f'{directory}/credentials.json', scopes
             )
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
-        with open('token.json', 'w', encoding='utf-8') as token:
+        with open(f'{directory}/token.json', 'w', encoding='utf-8') as token:
             token.write(creds.to_json())
     return creds
 
@@ -69,7 +74,7 @@ class Calendar:
         '''
         create dataframe of events
         '''
-        now = datetime.datetime.utcnow().isoformat() + "Z"
+        now = datetime.datetime.utcnow().isoformat() + 'Z'
         page_token = None
         all_events = []
         while True:
@@ -88,6 +93,7 @@ class Calendar:
                             'category_color': self.color,
                             'event_name': event.get('summary'),
                             'description': event.get('description'),
+                            'location': event.get('location'),
                             'start': event.get('start').get('dateTime'),
                             'end': event.get('end').get('dateTime')}
                     )
@@ -128,7 +134,7 @@ def get_daily_notes(calendar: Calendar,
     '''
     save mood and daily notes to its own csv file
     '''
-    now = datetime.datetime.utcnow().isoformat() + "Z"
+    now = datetime.datetime.utcnow().isoformat() + 'Z'
     page_token = None
     all_events = []
     while True:
@@ -160,7 +166,7 @@ def get_daily_notes(calendar: Calendar,
     return pd.DataFrame(all_events)
 
 
-colors_dict = {
+COLORS_DICT = {
     'Cocoa': {'Classic': '#AC725E', 'Modern': '#795548'},
     'Flamingo': {'Classic': '#D06B64', 'Modern': '#E67C73'},
     'Tomato': {'Classic': '#F83A22', 'Modern': '#D50000'},
@@ -187,8 +193,81 @@ colors_dict = {
     'Amethyst': {'Classic': '#A47AE2', 'Modern': '#9E69AF'}
 }
 
-color_classic_to_modern = {v['Classic']: v['Modern']
-                           for k, v in colors_dict.items()}
+COLOR_CLASSIC_TO_MODERN = {v['Classic']: v['Modern']
+                           for k, v in COLORS_DICT.items()}
+
+OUTSIDE_EVENTS = ['walk', 'bus', 'metro', 'taxi', 'taking out the trash']
+
+
+def service_geocode(gmaps: googlemaps.Client, address: str) -> tuple:
+    '''
+    simple function to apply geocode to get coordinates from address
+    '''
+    location = gmaps.geocode(address)
+    if location is not None:
+        return (location[0]['geometry']['location']['lat'],
+                location[0]['geometry']['location']['lng'])
+    return None
+
+
+def geocode_unique_addresses(df: DataFrame,
+                             gmaps: googlemaps.Client) -> DataFrame:
+    '''
+    geocode only uniaue addresses from df and then merge obtained coords
+    back to initial df
+    '''
+    # Step 1: Create a new DataFrame with unique addresses
+    unique_addresses = df['location'].unique()
+    unique_df = pd.DataFrame({'location': unique_addresses})
+
+    # Step 2: Apply geocoding function to obtain coordinates
+    unique_df['coordinates'] = unique_df['location'].apply(
+        lambda x: service_geocode(gmaps, x) if x is not None else None)
+
+    # Step 3: Merge coordinates back to the original DataFrame
+    df = pd.merge(df, unique_df, on='location', how='left')
+
+    return df
+
+
+def preprocess_df(df: DataFrame, timezone) -> DataFrame:
+    '''
+    1. convert datetime columns to datetime
+    2. add duration column and local start an end datetime columns
+    3. strip() all str values
+    4. convert colors to modern
+    5. add 'outside' to description of outside events
+    6. geocode locations
+    '''
+    # 1. convert datetime columns to datetime
+    df.start = pd.to_datetime(df.start, utc=True)
+    df.end = pd.to_datetime(df.end, utc=True)
+
+    # 2. add duration column and local start an end datetime columns
+    df['duration'] = df.end - df.start
+    df['start_local'] = pd.to_datetime(df.start).dt.tz_convert(timezone)
+    df['end_local'] = pd.to_datetime(df.end).dt.tz_convert(timezone)
+
+    # 3. strip() all str values
+    df_obj = df.select_dtypes('object')
+    df[df_obj.columns] = df_obj.apply(lambda x: x.str.strip())
+
+    # 4. convert classic colors to modern
+    df.category_color = df.category_color.str.upper().apply(
+        lambda x: COLOR_CLASSIC_TO_MODERN.get(x, x))
+
+    # 5. add 'outside' to description of outside events
+    df.description = df.description.fillna('')
+    to_outside_bool = (
+        ((df['event_name'].isin(OUTSIDE_EVENTS))
+            | (~df['location'].isna()))
+        & (~df['description'].str.startswith('outside')))
+    df.loc[to_outside_bool, 'description'] = (
+        'outside\n' + df.loc[to_outside_bool, 'description']).str.strip()
+
+    # 6. geocode locations
+    gmaps = googlemaps.Client(GM_API_KEY)
+    return geocode_unique_addresses(df, gmaps)
 
 
 def main(force: bool) -> None:
@@ -199,8 +278,8 @@ def main(force: bool) -> None:
     start_time = '2024-02-01T00:00:00Z'
     print('getting credentials...')
     creds = create_credentials(
-        ['https://www.googleapis.com/auth/calendar.readonly'])
-    service = build("calendar", "v3", credentials=creds)
+        ['https://www.googleapis.com/auth/calendar.readonly'], DIR_PATH)
+    service = build('calendar', 'v3', credentials=creds)
 
     print('downloading data...')
     my_calendars = get_calendars(service)
@@ -210,37 +289,30 @@ def main(force: bool) -> None:
     timezone = primary_calendar.timezone
     my_calendars = [i for i in my_calendars if i != primary_calendar]
 
-    if os.path.exists('all_events.csv') and not force:
-        prev_df = pd.read_csv('all_events.csv')
+    if os.path.exists(f'{DIR_PATH}/all_events.csv') and not force:
+        prev_df = pd.read_csv(f'{DIR_PATH}/all_events.csv')
         start_time = prev_df.iloc[-1]['start']
         for from_, to_ in {' ': 'T', '+00:00': 'Z'}.items():
             start_time = start_time.replace(from_, to_)
 
     df = pd.concat([i.get_events(service, start_time) for i in my_calendars])
 
-    df.start = pd.to_datetime(df.start, utc=True)
-    df.end = pd.to_datetime(df.end, utc=True)
-    df['duration'] = df.end - df.start
-    df['start_local'] = pd.to_datetime(df.start).dt.tz_convert(timezone)
-    df['end_local'] = pd.to_datetime(df.end).dt.tz_convert(timezone)
-    df_obj = df.select_dtypes('object')
-    df[df_obj.columns] = df_obj.apply(lambda x: x.str.strip())
-    if os.path.exists('all_events.csv') and not force:
+    df = preprocess_df(df, timezone)
+
+    if os.path.exists(f'{DIR_PATH}/all_events.csv') and not force:
         cols = ['start', 'end', 'start_local', 'end_local']
         prev_df[cols] = prev_df[cols].apply(pd.to_datetime)
         prev_df.duration = pd.to_timedelta(prev_df.duration)
         df = pd.concat([prev_df, df])
+
     df.sort_values(by='start', inplace=True)
     df.drop_duplicates(inplace=True)
-    df.category_color = df.category_color.str.upper().apply(
-        lambda x: color_classic_to_modern.get(x, x))
-    df.to_csv('all_events.csv', index=False)
+
+    df.to_csv(f'{DIR_PATH}/all_events.csv', index=False)
 
     other_cal = [i for i in my_calendars if i.name == 'other'][0]
     dn = get_daily_notes(other_cal, service, '2024-02-01T00:00:00Z')
-    dn.to_csv('daily_notes.csv', index=False)
-
-    # print('done.')
+    dn.to_csv(f'{DIR_PATH}/daily_notes.csv', index=False)
 
 
 # %%

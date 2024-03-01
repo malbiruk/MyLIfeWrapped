@@ -1,9 +1,7 @@
 import os
 
-# import gspread
 import pandas as pd
 from calendar_.obtain_data import create_credentials
-# from get_stats import flatten
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from rich.progress import (BarColumn, MofNCompleteColumn, Progress,
@@ -81,8 +79,7 @@ def get_file_id_by_name(service, file_name, parent_folder_id=None):
     if 'files' in response and response['files']:
         file_id = response['files'][0]['id']
         return file_id
-    else:
-        return None
+    return None
 
 
 def upload_image(service, file_path, folder_id):

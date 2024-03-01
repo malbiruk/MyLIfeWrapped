@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 
 source /home/klim/.virtualenvs/MyLifeWrapped/bin/activate
-cd /home/klim/Documents/work/scripts/MyLifeWrapped/calendar_
+cd /home/klim/Documents/work/scripts/MyLifeWrapped/
 
 if [ -n "$1" ]; then
-    python obtain_data.py "$1"
+    python -m calendar_.obtain_data "$1"
 else
-    python obtain_data.py
+    python -m calendar_.obtain_data
 fi
 
-cd ..
 python get_stats.py
 python upload_imgs.py
 python update_slides.py

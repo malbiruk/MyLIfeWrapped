@@ -6,4 +6,4 @@ calendar_/*.json
 backgrounds*
 logo*
 *__pycache__*
-my_api_keys.py
+*my_api_keys.py
