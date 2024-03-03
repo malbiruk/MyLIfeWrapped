@@ -11,8 +11,11 @@ import july
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from adjustText import adjust_text
+from calendar_.my_api_keys import GM_API_KEY
+from geography import generate_map
 from matplotlib import patheffects, rcParams, transforms
-from matplotlib.patches import Wedge
+from matplotlib.patches import Ellipse, Wedge
 from pandas import DataFrame
 from PIL import Image, ImageDraw, ImageFont
 from wordcloud import WordCloud
@@ -182,7 +185,7 @@ def groovy_barplot(labels: list,
     colors = np.array(colors)[sorted_indices]
 
     # Create a horizontal bar plot
-    fig, ax = plt.subplots(figsize=(576 / 100, 576*1.2 / 100), dpi=100)
+    fig, ax = plt.subplots(figsize=(576 / 100, 576 * 1.2 / 100), dpi=100)
 
     # Customize the appearance
     bars = ax.barh(labels, values, color=colors, height=0.6, edgecolor='none')
@@ -199,7 +202,7 @@ def groovy_barplot(labels: list,
                     else ' minutes')
         texxt = f'{int(bar_.get_width()):,} {minute_s}'
         ax.text(
-            bar_.get_width() * .7 / 2 + 70,
+            bar_.get_width() * .7 / 2 + .025 * values.max(),
             bar_.get_y() + bar_.get_height() * 1.4 / 2,
             label,
             ha='center', va='center', color='#1e1e1e', fontweight='bold',
@@ -226,7 +229,7 @@ def groovy_barplot(labels: list,
 
     ax.margins(x=0)
     ax.set_xlim(0)
-    ax.set_ylim(-.5, len(labels)+.5)
+    ax.set_ylim(-.5, len(labels) + .5)
 
     ax.set_xticks([])
     ax.set_yticks([])
@@ -538,8 +541,8 @@ def groovy_day_circle(
                   'duration_seconds': None}
     for _, row in median_day.iterrows():
         if (row.category != prev_entry['category']):
-        #         or (row.category == prev_entry['category']
-        #             and events_overlap(row, prev_entry))):
+            #         or (row.category == prev_entry['category']
+            #             and events_overlap(row, prev_entry))):
             c += 1
         r = radius - c * gap
         # print(row.category, r)
@@ -807,12 +810,17 @@ def groovy_3d_barplot(
 def groovy_july(
         df: DataFrame,
         title: str,
-        output_path: str) -> None:
+        output_path: str,
+        date_col: str = 'date',
+        val_col: str = 'mood') -> None:
+    '''
+    create calendar heatmap with values from val_col with date_col x values
+    '''
     fig, ax = plt.subplots(figsize=(576 / 100, 576 / 100,), dpi=100)
     fig.patch.set_alpha(0)
     # plt.axis('off')
 
-    july.heatmap(df.date, df.mood, cmap='RdYlGn',
+    july.heatmap(df[date_col], df[val_col], cmap='RdYlGn',
                  date_label=True, horizontal=False,
                  year_label=False,
                  cmin=1, cmax=5,
@@ -820,7 +828,6 @@ def groovy_july(
                  )
 
     ax.collections[0].set_linewidth(0)
-
 
     for text in ax.texts:
         text.set_fontfamily('Ubuntu')
@@ -852,5 +859,113 @@ def groovy_july(
         y1_mod=1.2,
         title=title,
         y_title_mod=1 / 6
+    )
+    crop_img(img, output_path)
+
+
+def groovy_map(places_df: DataFrame,
+               title: str,
+               output_path: str) -> None:
+    '''
+    create images with map of top locations
+    with colors and markersizes corresponding to duration
+    '''
+    places_df['radius'] = np.sqrt(places_df['duration'] /
+                                  places_df['duration'].max()) * 30
+
+    center_lat = places_df['coordinates'].apply(lambda x: x[0]).mean()
+    center_lon = places_df['coordinates'].apply(lambda x: x[1]).mean()
+
+    x_min = places_df['coordinates'].apply(lambda x: x[0]).min()
+    x_max = places_df['coordinates'].apply(lambda x: x[0]).max()
+    y_min = places_df['coordinates'].apply(lambda x: x[1]).min()
+    y_max = places_df['coordinates'].apply(lambda x: x[1]).max()
+
+    style = {'feature': 'all', 'element': 'labels', 'visibility': 'off'}
+
+    trans = generate_map(
+        x_bounds=(x_min, x_max),
+        y_bounds=(y_min, y_max),
+        center=(center_lat, center_lon),
+        map_size=(576, 576),
+        api_key=GM_API_KEY,
+        output_path='map.png',
+        return_trans=True,
+        style=style,
+    )
+
+    _, ax = plt.subplots(figsize=(576 / 100, 576 / 100), dpi=100)
+
+    image = plt.imread("map.png")
+    img = ax.imshow(image)
+
+    for _, row in places_df.iterrows():
+        x, y = row['coordinates'][0], row['coordinates'][1]
+        ax.plot(x, y, 'o', markersize=row['radius'],
+                color=row['category_color'],
+                alpha=0.3, transform=trans + ax.transData)
+        ax.plot(x, y, 'o', markersize=row['radius'] / 10,
+                color=row['category_color'],
+                alpha=1, transform=trans + ax.transData)
+
+    texts = []
+    for _, row in places_df.iloc[5:].iterrows():
+        x, y = row['coordinates'][0], row['coordinates'][1]
+        texts.append(ax.text(x, y, row['location'].split('-')[0].split(',')[0],
+                             ha='center', va='center',
+                             color=row['category_color'],
+                             fontfamily='Ubuntu',
+                             fontweight='regular',
+                             fontsize=4 + .5 * row['radius'],
+                             transform=trans + ax.transData))
+    for _, row in places_df.head(5).iterrows():
+        x, y = row['coordinates'][0], row['coordinates'][1]
+        texts.append(ax.text(x, y, row['location'].split('-')[0].split(',')[0],
+                             ha='center', va='center',
+                             color=row['category_color'],
+                             fontfamily='Ubuntu',
+                             fontweight='bold',
+                             fontsize=4 + .5 * row['radius'],
+                             transform=trans + ax.transData))
+        texts.append(ax.text(x, y, f"{round(row['duration'])} min",
+                             ha='center', va='top',
+                             color=row['category_color'],
+                             fontfamily='Ubuntu',
+                             fontsize=9,
+                             transform=trans + ax.transData))
+    adjust_text(texts)
+
+    ax.set_aspect("equal")
+    ax.set_axis_off()
+
+    x_min, x_max = ax.get_xlim()
+    y_min, y_max = ax.get_ylim()
+
+    # Calculate center and radius in display coordinates
+    center_display = ((x_max + x_min) / 2, (y_max + y_min) / 2)
+    radius_display = (x_max - x_min) / 2
+
+    # Create a circular mask
+    circle = Ellipse(center_display, width=radius_display * 2,
+                     height=radius_display * 2, edgecolor='none', facecolor='none')
+
+    # Apply the circular mask to the plot
+    ax.add_patch(circle)
+    img.set_clip_path(circle)
+
+    plt.margins(0, 0)
+    plt.tight_layout(pad=0)
+
+    plt.subplots_adjust(left=.05, right=.95)
+
+    plt.savefig('transparent_chart.png', bbox_inches='tight',
+                transparent=True, pad_inches=0)
+    plt.close()
+
+    img = add_bg_and_h1(
+        'transparent_chart.png',
+        y1_mod=1.2,
+        title=title,
+        y_title_mod=1 / 8
     )
     crop_img(img, output_path)

@@ -3,11 +3,17 @@ calculate and generate images of different stats from calendar_/all_events.csv
 '''
 
 
+import math
+import sys
+
 import gen_image
+import googlemaps
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+from adjustText import adjust_text
+from calendar_.my_api_keys import GM_API_KEY
 from colorutils import hex_to_rgb, rgb_to_hex
 from pandas import DataFrame
 from sklearn.cluster import DBSCAN
@@ -151,7 +157,7 @@ def get_multitasking_time_info(df: DataFrame, timerange: str,
 def get_top_categories_events_info(df: DataFrame, timerange: str,
                                    postfix: str = '') -> None:
     '''
-    calculate top categories, their time spent and save images
+    calculate top categories, their duration and save images
     '''
     df = df.loc[df.event_name != 'sleep'].copy()
 
@@ -191,6 +197,33 @@ def get_top_categories_events_info(df: DataFrame, timerange: str,
         f'Your top activities\nthis {timerange} were',
         f'pictures/04_top_events_{timerange}{postfix}.png',
         mirrored=True)
+
+
+def get_top_events_per_categories(df: DataFrame, timerange: str,
+                                   postfix: str = '') -> None:
+    '''
+    calculate top events in categories, their duration and save images
+    '''
+    df = df.loc[df.event_name != 'sleep'].copy()
+    categories = df.category.unique()
+    for category in categories:
+        top_events = (
+            df.loc[df.category==category]
+            .groupby(['event_name', 'category_color'], as_index=False)
+            .agg({'duration': 'sum'})
+            .sort_values('duration', ascending=False)
+            .head(5)
+        )
+        top_events.duration = round(top_events.duration
+                                    / pd.Timedelta(minutes=1))
+
+        gen_image.groovy_barplot(
+            top_events.event_name.to_list(),
+            top_events.duration.to_list(),
+            top_events.category_color.to_list(),
+            f'Your top {category} activities\nthis {timerange} were',
+            f'pictures/15_top_{category}_events_{timerange}{postfix}.png',
+            mirrored=True)
 
 
 def text_cloud_of_all_events(df: DataFrame, timerange: str,
@@ -476,6 +509,67 @@ def get_mood_heatmap(df: DataFrame, timerange: str,
     gen_image.groovy_july(df, title, output_path)
 
 
+def get_time_outside(df: DataFrame,
+                     total_tracked: pd.Timedelta,
+                     timerange: str,
+                     postfix: str = '') -> None:
+    '''
+    calculate stats regarding time outside and save image
+    '''
+    df = df.copy()
+    df.description = df.description.fillna('')
+    time_outside = (df.loc[df.description.str.startswith('outside')]
+                    .duration.sum())
+    perc_all_time = round(time_outside / total_tracked * 100, 2)
+
+    df['date'] = df.start_local.dt.date
+    outside_dates_count = (df[df['description']
+                              .str.startswith('outside')]
+                           ['date'].nunique())
+    total_dates = df['date'].nunique()
+
+    perc_days_outside = round(outside_dates_count / total_dates * 100, 2)
+    outside_per_day = (df[df['description']
+                          .str.startswith('outside')]
+                       .groupby('date')
+                       .duration
+                       .sum()).median()
+
+    outside_pd_str = f'{round(outside_per_day / pd.Timedelta(minutes=1)):,}'
+    time_outside_str = f'{round(time_outside / pd.Timedelta(minutes=1)):,}'
+    minute_s = 'minute' if str(time_outside_str).endswith('1') else 'minutes'
+    h1 = f'You spent {time_outside_str} {minute_s}\n'\
+        f'outside your home\nthis {timerange}'
+    minute_s = 'minute' if str(outside_pd_str).endswith('1') else 'minutes'
+    h2 = f'It is {perc_all_time}% of all time tracked\n'\
+        f'You were outside on {perc_days_outside}% of days\n'\
+        f'for {outside_pd_str} {minute_s}, as a median'
+
+    gen_image.generate_spotify_style_image(
+        h1, h2, f'pictures/13_time_outside_{timerange}{postfix}.png')
+
+
+def get_locations(df: DataFrame, timerange: str,
+                  postfix: str = '') -> None:
+    '''
+    get locations and save image of them on google maps
+    '''
+    places_df = df.groupby(['location', 'coordinates']).agg(
+        {'duration': 'sum'}).reset_index().sort_values('duration', ascending=False)
+    places_df.duration = places_df.duration / pd.Timedelta(minutes=1)
+    places_df.coordinates = places_df.coordinates.apply(eval)
+
+    color_df = df.groupby(['location', 'category_color']).agg(
+        {'duration': 'sum'}).reset_index().sort_values('duration', ascending=False)
+    color_df = color_df.drop_duplicates(subset='location').drop(columns=['duration'])
+    places_df = pd.merge(places_df, color_df, on='location')
+
+    title = f'Places you visited\nthis {timerange}'
+    output_path = f'pictures/14_places_map_{timerange}{postfix}.png'
+
+    gen_image.groovy_map(places_df, title, output_path)
+
+
 def main() -> None:
     '''
     calculate and generate images of different stats
@@ -512,6 +606,9 @@ def main() -> None:
             get_median_day(df_part, timerange, postfix)
             get_categories_dynamics(df_part, timerange, postfix)
             get_weekday_dynamics(df_part, timerange, postfix)
+            get_time_outside(df_part, total_tracked, timerange, postfix)
+            get_locations(df_part, timerange, postfix)
+            # get_top_events_per_categories(df_part, timerange, postfix)
 
             df_mood_part = df_mood.loc[
                 df_mood['date'].dt.date >= (
@@ -552,6 +649,5 @@ if __name__ == '__main__':
 #         - pd.Timedelta(days=tr_to_days[timerange]))
 # ]
 
-# %%
 
 # %%
