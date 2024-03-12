@@ -15,13 +15,15 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import Resource, build
 from pandas import DataFrame
+from progress_bar import progress_bar
 
 # from googleapiclient.errors import HttpError
 
 # If modifying these scopes, delete the file token.json.
 CALENDARS_TO_EXCLUDE = ['Birthdays',
                         'k.kostyuk@insilicomedicine.com',
-                        'k.kostyuk@easyomics.com']
+                        'k.kostyuk@easyomics.com',
+                    ]
 
 DIR_PATH = 'calendar_'
 
@@ -97,6 +99,7 @@ class Calendar:
                             'start': event.get('start').get('dateTime'),
                             'end': event.get('end').get('dateTime')}
                     )
+
             page_token = events.get('nextPageToken')
             if not page_token:
                 break
@@ -295,8 +298,13 @@ def main(force: bool) -> None:
         for from_, to_ in {' ': 'T', '+00:00': 'Z'}.items():
             start_time = start_time.replace(from_, to_)
 
-    df = pd.concat([i.get_events(service, start_time) for i in my_calendars])
+    calendar_dfs = []
+    with progress_bar as p:
+        for cal in p.track(my_calendars,
+                           description='dnld calendars'):
+            calendar_dfs.append(cal.get_events(service, start_time))
 
+    df = pd.concat(calendar_dfs)
     df = preprocess_df(df, timezone)
 
     if os.path.exists(f'{DIR_PATH}/all_events.csv') and not force:
