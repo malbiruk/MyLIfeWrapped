@@ -34,7 +34,7 @@ def calculate_zoom_level(x_min: float, x_max: float,
 
         # Check if the bounding box fits within the desired image size
         if pixel_width < image_size[0] and pixel_height < image_size[1]:
-            return zoom + 1
+            return zoom
 
     # If the loop completes without finding a suitable zoom level, return 0
     return 0
