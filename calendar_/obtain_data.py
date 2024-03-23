@@ -23,7 +23,7 @@ from progress_bar import progress_bar
 CALENDARS_TO_EXCLUDE = ['Birthdays',
                         'k.kostyuk@insilicomedicine.com',
                         'k.kostyuk@easyomics.com',
-                    ]
+                        ]
 
 DIR_PATH = 'calendar_'
 
@@ -199,7 +199,8 @@ COLORS_DICT = {
 COLOR_CLASSIC_TO_MODERN = {v['Classic']: v['Modern']
                            for k, v in COLORS_DICT.items()}
 
-OUTSIDE_EVENTS = ['walk', 'bus', 'metro', 'taxi', 'taking out the trash']
+OUTSIDE_EVENTS = ['walk', 'bus', 'metro', 'taxi', 'taking out the trash',
+                  'rollerblading']
 
 
 def service_geocode(gmaps: googlemaps.Client, address: str) -> tuple:
