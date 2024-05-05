@@ -15,7 +15,6 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import Resource, build
 from pandas import DataFrame
-from progress_bar import progress_bar
 
 # from googleapiclient.errors import HttpError
 
@@ -54,6 +53,20 @@ def create_credentials(scopes: list, directory: str = '.') -> None:
     return creds
 
 
+def human_format(num: float) -> str:
+    '''
+    big numbers to format with K, M, B
+    '''
+    # pylint: disable=consider-using-f-string
+    num = float('{:.3g}'.format(num))
+    magnitude = 0
+    while abs(num) >= 1000:
+        magnitude += 1
+        num /= 1000.0
+    return '{}{}'.format('{:f}'.format(num).rstrip('0').rstrip('.'),
+                         ['', 'K', 'M', 'B', 'T'][magnitude])
+
+
 @dataclass
 class Calendar:
     '''
@@ -72,18 +85,18 @@ class Calendar:
         '''
         return f'Calendar({self.name})'
 
-    def get_events(self, service: Resource, start_time: str) -> DataFrame:
+    def get_events(self, service: Resource, start_time: str, end_time: str) -> DataFrame:
         '''
         create dataframe of events
         '''
-        now = datetime.datetime.utcnow().isoformat() + 'Z'
         page_token = None
         all_events = []
+        c = 0
         while True:
             events = service.events().list(
                 calendarId=self.id,
                 timeMin=start_time,
-                timeMax=now,
+                timeMax=end_time,
                 singleEvents=True,
                 orderBy='startTime').execute()
             for event in events.get('items'):
@@ -99,6 +112,9 @@ class Calendar:
                             'start': event.get('start').get('dateTime'),
                             'end': event.get('end').get('dateTime')}
                     )
+                    c += 1
+                    if c % 1000 == 0:
+                        print(f'{human_format(c)} events loaded', end='\r')
 
             page_token = events.get('nextPageToken')
             if not page_token:
@@ -280,44 +296,66 @@ def main(force: bool) -> None:
     (events from 2024-02-01 or last saved to now)
     '''
     start_time = '2024-02-01T00:00:00Z'
-    print('getting credentials...')
-    creds = create_credentials(
-        ['https://www.googleapis.com/auth/calendar.readonly'], DIR_PATH)
-    service = build('calendar', 'v3', credentials=creds)
-
-    print('downloading data...')
-    my_calendars = get_calendars(service)
-    my_calendars = [i for i in my_calendars
-                    if i.name not in CALENDARS_TO_EXCLUDE]
-    primary_calendar = [i for i in my_calendars if i.primary][0]
-    timezone = primary_calendar.timezone
-    my_calendars = [i for i in my_calendars if i != primary_calendar]
-
     if os.path.exists(f'{DIR_PATH}/all_events.csv') and not force:
         prev_df = pd.read_csv(f'{DIR_PATH}/all_events.csv')
         start_time = prev_df.iloc[-1]['start']
         for from_, to_ in {' ': 'T', '+00:00': 'Z'}.items():
             start_time = start_time.replace(from_, to_)
 
-    calendar_dfs = []
-    with progress_bar as p:
-        for cal in p.track(my_calendars,
-                           description='dnld calendars'):
-            calendar_dfs.append(cal.get_events(service, start_time))
+    end_time = datetime.datetime.utcnow().isoformat() + 'Z'
 
-    df = pd.concat(calendar_dfs)
-    df = preprocess_df(df, timezone)
+    print('getting credentials...')
+    creds = create_credentials(
+        ['https://www.googleapis.com/auth/calendar.readonly'], DIR_PATH)
+    service = build('calendar', 'v3', credentials=creds)
 
-    if os.path.exists(f'{DIR_PATH}/all_events.csv') and not force:
-        cols = ['start', 'end', 'start_local', 'end_local']
-        prev_df[cols] = prev_df[cols].apply(pd.to_datetime)
-        prev_df.duration = pd.to_timedelta(prev_df.duration)
-        df = pd.concat([prev_df, df])
+    # split to n chunks
+    n_chunks = 1
+    start_datetime = datetime.datetime.strptime(start_time, '%Y-%m-%dT%H:%M:%SZ')
+    end_datetime = datetime.datetime.strptime(end_time, '%Y-%m-%dT%H:%M:%S.%fZ')
+    total_duration = end_datetime - start_datetime
+    chunk_duration = total_duration / n_chunks
+    chunk_end_times = []
+    for i in range(1, n_chunks+1):
+        chunk_end_time = start_datetime + i * chunk_duration
+        chunk_end_times.append(chunk_end_time.strftime('%Y-%m-%dT%H:%M:%SZ'))
 
-    df.sort_values(by='start', inplace=True)
-    df.drop_duplicates(inplace=True)
+    for i, end_time in enumerate(chunk_end_times):
+        print(f"Chunk {i+1}: {end_time}")
 
-    df.to_csv(f'{DIR_PATH}/all_events.csv', index=False)
+        print('downloading data...')
+        my_calendars = get_calendars(service)
+        my_calendars = [i for i in my_calendars
+                        if i.name not in CALENDARS_TO_EXCLUDE]
+        primary_calendar = [i for i in my_calendars if i.primary][0]
+        timezone = primary_calendar.timezone
+        my_calendars = [i for i in my_calendars if i != primary_calendar]
+
+        if os.path.exists(f'{DIR_PATH}/all_events.csv') and not force:
+            prev_df = pd.read_csv(f'{DIR_PATH}/all_events.csv')
+            start_time = prev_df.iloc[-1]['start']
+            for from_, to_ in {' ': 'T', '+00:00': 'Z'}.items():
+                start_time = start_time.replace(from_, to_)
+
+        calendar_dfs = []
+        for c, cal in enumerate(my_calendars):
+            print(f'calendar "{cal.name}" ({c+1}/{len(my_calendars)})')
+            calendar_dfs.append(cal.get_events(service, start_time, end_time))
+
+        df = pd.concat(calendar_dfs)
+        df = preprocess_df(df, timezone)
+
+        if os.path.exists(f'{DIR_PATH}/all_events.csv') and not force:
+            cols = ['start', 'end', 'start_local', 'end_local']
+            prev_df[cols] = prev_df[cols].apply(pd.to_datetime)
+            prev_df.duration = pd.to_timedelta(prev_df.duration)
+            df = pd.concat([prev_df, df])
+
+        df.sort_values(by='start', inplace=True)
+        df.drop_duplicates(inplace=True)
+
+        df.to_csv(f'{DIR_PATH}/all_events.csv', index=False)
+        print()
 
     other_cal = [i for i in my_calendars if i.name == 'other'][0]
     dn = get_daily_notes(other_cal, service, '2024-02-01T00:00:00Z')
