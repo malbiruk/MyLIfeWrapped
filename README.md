@@ -9,7 +9,7 @@ To achieve this, I did the next things:<br>
 via DALL-E-2 with prompt `colorful abstract art with gradients in pastel colors`.
 1. Put text and plots with stats on these backgrounds and crop them using PIL.
 1. Upload the images created to Google Drive and then insert them in Google Slides using google API.
-1. Repeat this process every day automatically.
+1. Repeat this process automatically.
 
 In the end I get something like this:
 <p align="center">
